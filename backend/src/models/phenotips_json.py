@@ -3,7 +3,7 @@ Manages Phenotips import for rosalution. A Phenotips json import within rosaluti
 an external ID, variants, and genes.
 """
 # pylint: disable=too-few-public-methods
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict
 
 
@@ -48,3 +48,6 @@ class BasePhenotips(BaseModel):
     variants: List[PhenotipsVariants] = []
     genes: List[PhenotipsGene] = []
     features: List[PhenotipsHpoTerm] = []
+    brief: Optional[Dict[str, Any]] = None
+    clinical_history: Optional[Dict[str, Any]] = None
+    family_history: Optional[Dict[str, Any]] = None
