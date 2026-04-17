@@ -5,6 +5,7 @@ import sinon from 'sinon';
 import Analyses from '@/models/analyses.js';
 
 import GeneBox from '@/components/AnalysisView/GeneBox.vue';
+import PmiGeneBox from '@/components/AnalysisView/PmiGeneBox.vue';
 import InputDialog from '@/components/Dialogs/InputDialog.vue';
 import NotificationDialog from '@/components/Dialogs/NotificationDialog.vue';
 import DiscussionSection from '@/components/AnalysisView/DiscussionSection.vue';
@@ -753,6 +754,65 @@ describe('AnalysisView', () => {
       expect(toastWrapper.text()).to.contain('');
     });
   });
+
+  describe('PMI analysis view', () => {
+    afterEach(() => {
+      analysisStore.forceUpdate(fixtureData());
+    });
+
+    it('excludes Discussion and Attachments anchors and sections for PMI', async () => {
+      analysisStore.forceUpdate(pmiFixtureData());
+      await wrapper.vm.$nextTick();
+
+      const headerComponent = wrapper.get('[data-test="analysis-view-header"]');
+      expect(headerComponent.attributes('sectionanchors')).to.equal(
+          'Brief,Clinical History,Family History,Pedigree',
+      );
+      expect(wrapper.findComponent(DiscussionSection).exists()).to.be.false;
+      expect(wrapper.findComponent(AttachmentsSection).exists()).to.be.false;
+    });
+
+    it('renders PMI gene boxes instead of default gene boxes for PMI project analyses', async () => {
+      analysisStore.forceUpdate(pmiFixtureData());
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.findComponent(PmiGeneBox).exists()).to.be.true;
+      expect(wrapper.findComponent(GeneBox).exists()).to.be.false;
+    });
+
+    it('renders synthesized PMI sections as read-only in edit mode', async () => {
+      analysisStore.forceUpdate(pmiFixtureData({
+        sections: [{
+          header: 'Brief',
+          content: [
+            {type: 'section-text', field: 'Nominator', value: ['PMI intake team']},
+            {type: 'section-text', field: 'Participant', value: ['LW002099']},
+            {type: 'section-text', field: 'Phenotype', value: ['Custom phenotype summary']},
+            {type: 'section-text', field: 'HPO Terms', value: ['HP:0001250: Seizure']},
+          ],
+        }],
+      }));
+      await wrapper.vm.$nextTick();
+
+      await triggerAction(wrapper, 'Edit');
+      await wrapper.vm.$nextTick();
+
+      const briefSection = wrapper.getComponent('[id=Brief]');
+      const clinicalHistorySection = wrapper.getComponent('[id=Clinical_History]');
+      const familyHistorySection = wrapper.getComponent('[id=Family_History]');
+      const pedigreeSection = wrapper.getComponent('[id=Pedigree]');
+
+      expect(briefSection.props('edit')).to.be.true;
+      expect(clinicalHistorySection.props('edit')).to.be.false;
+      expect(clinicalHistorySection.props('writePermissions')).to.be.false;
+      expect(familyHistorySection.props('edit')).to.be.false;
+      expect(familyHistorySection.props('writePermissions')).to.be.false;
+      expect(pedigreeSection.props('edit')).to.be.false;
+      expect(pedigreeSection.props('writePermissions')).to.be.false;
+
+      await triggerAction(wrapper, 'Edit');
+    });
+  });
 });
 
 
@@ -1034,4 +1094,47 @@ function fixtureData(attributes) {
     ],
     ...attributes,
   };
+}
+
+/**
+ * Returns fixture data aligned with PMI analysis sections and rendering behavior.
+ *
+ * @param {Object} attributes from the analysis to override
+ * @return {Object} containing PMI analysis data.
+ */
+function pmiFixtureData(attributes) {
+  return fixtureData({
+    name: 'LW009999',
+    project_name: 'PMI',
+    sections: [
+      {
+        header: 'Brief',
+        content: [
+          {type: 'section-text', field: 'Nominator', value: ['PMI intake team']},
+        ],
+      },
+      {
+        header: 'Clinical History',
+        content: [
+          {type: 'section-text', field: 'Clinical Diagnosis', value: ['Autonomic dysfunction']},
+        ],
+      },
+      {
+        header: 'Family History',
+        content: [
+          {type: 'section-text', field: 'Family Diseases', value: ['Maternal history note']},
+        ],
+      },
+      {
+        header: 'Pedigree',
+        attachment_field: 'Pedigree',
+        content: [{
+          type: 'images-dataset',
+          field: 'Pedigree',
+          value: [],
+        }],
+      },
+    ],
+    ...attributes,
+  });
 }

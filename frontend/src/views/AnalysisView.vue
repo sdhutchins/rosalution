@@ -14,31 +14,63 @@
       <ToastDialog data-test="toast" ref="rosalution-toast"/>
     </app-header>
     <app-content>
-      <GeneBox
-        v-for="genomicUnit in genomicUnitsList"
-        :key="genomicUnit.id"
-        :name="analysisName"
-        :gene="genomicUnit.gene"
-        :transcripts="genomicUnit.transcripts"
-        :variants="genomicUnit.variants"
-        @clipboard-copy="copyToClipboard"
-      />
-      <SectionBox
-        v-for="(section) in sectionsList"
-        :id="section.header.replace(' ', '_')"
-        :key="`${section.header}`"
-        :analysis_name="analysisName"
-        :header="section.header"
-        :content="section.content"
-        :attachmentField="section.attachment_field"
-        :writePermissions="hasWritePermissions"
-        :edit="edit"
-        @attach-image="attachSectionImage"
-        @update-image="updateSectionImage"
-        @update:content-row="onAnalysisContentUpdated"
-        @download="downloadSectionAttachment"
-      />
+      <template v-if="isPmiProject">
+        <SectionBox
+          v-for="(section) in sectionsList"
+          :id="section.header.replace(' ', '_')"
+          :key="`${section.header}`"
+          :analysis_name="analysisName"
+          :header="section.header"
+          :content="section.content"
+          :attachmentField="section.attachment_field"
+          :writePermissions="!section.is_fallback && hasWritePermissions"
+          :edit="!section.is_fallback && edit"
+          @attach-image="attachSectionImage"
+          @update-image="updateSectionImage"
+          @update:content-row="onAnalysisContentUpdated"
+          @download="downloadSectionAttachment"
+        />
+        <div class="rosalution-section-container">
+          <h2 class="variants-of-interest">Variants of Interest</h2>
+        </div>
+        <PmiGeneBox
+          v-for="genomicUnit in genomicUnitsList"
+          :key="genomicUnit.id"
+          :name="analysisName"
+          :gene="genomicUnit.gene"
+          :transcripts="genomicUnit.transcripts"
+          :variants="genomicUnit.variants"
+          @clipboard-copy="copyToClipboard"
+        />
+      </template>
+      <template v-else>
+        <GeneBox
+          v-for="genomicUnit in genomicUnitsList"
+          :key="genomicUnit.id"
+          :name="analysisName"
+          :gene="genomicUnit.gene"
+          :transcripts="genomicUnit.transcripts"
+          :variants="genomicUnit.variants"
+          @clipboard-copy="copyToClipboard"
+        />
+        <SectionBox
+          v-for="(section) in sectionsList"
+          :id="section.header.replace(' ', '_')"
+          :key="`${section.header}`"
+          :analysis_name="analysisName"
+          :header="section.header"
+          :content="section.content"
+          :attachmentField="section.attachment_field"
+          :writePermissions="hasWritePermissions"
+          :edit="edit"
+          @attach-image="attachSectionImage"
+          @update-image="updateSectionImage"
+          @update:content-row="onAnalysisContentUpdated"
+          @download="downloadSectionAttachment"
+        />
+      </template>
       <DiscussionSection
+        v-if="!isPmiProject"
         id="Discussion"
         :discussions="discussions"
         :existingAttachments="attachments"
@@ -52,6 +84,7 @@
         @discussion:delete-reply="deleteDiscussionReply"
       />
       <AttachmentsSection
+        v-if="!isPmiProject"
         id="Attachments"
         :attachments="attachments"
         :writePermissions="hasWritePermissions"
@@ -80,6 +113,7 @@ import {onMounted, ref, computed, provide, watch, useTemplateRef} from 'vue';
 import AnalysisViewHeader from '@/components/AnalysisView/AnalysisViewHeader.vue';
 import SectionBox from '@/components/AnalysisView/SectionBox.vue';
 import GeneBox from '@/components/AnalysisView/GeneBox.vue';
+import PmiGeneBox from '@/components/AnalysisView/PmiGeneBox.vue';
 import InputDialog from '@/components/Dialogs/InputDialog.vue';
 import NotificationDialog from '@/components/Dialogs/NotificationDialog.vue';
 import ToastDialog from '@/components/Dialogs/ToastDialog.vue';
@@ -126,11 +160,13 @@ const thirdPartyLinks = computed(() => {
 });
 
 const sectionsHeaders = computed(() => {
-  const sections = analysisStore.analysis.sections.map((section) => {
+  const sections = sectionsList.value.map((section) => {
     return section.header;
   });
-  sections.push('Discussion');
-  sections.push('Attachments');
+  if (!isPmiProject.value) {
+    sections.push('Discussion');
+    sections.push('Attachments');
+  }
   return sections;
 });
 
@@ -181,8 +217,94 @@ const discussionContextActions = [
   },
 ];
 
+/** Skeleton sections for PMI when the stored analysis predates a section (matches phenotips_importer.py). */
+const PMI_DEFAULT_SECTIONS = {
+  Brief: {
+    header: 'Brief',
+    content: [
+      {type: 'section-text', field: 'Nominator', value: []},
+      {type: 'section-text', field: 'Participant', value: []},
+      {type: 'section-text', field: 'Phenotype', value: []},
+      {type: 'section-text', field: 'HPO Terms', value: []},
+      {type: 'section-text', field: 'ACMG Classification', value: []},
+      {type: 'section-text', field: 'ACMG Classification Criteria', value: []},
+      {type: 'section-text', field: 'ACMG Criteria To Add', value: []},
+      {type: 'section-text', field: 'Decision', value: []},
+    ],
+  },
+  'Clinical History': {
+    header: 'Clinical History',
+    content: [
+      {type: 'section-text', field: 'Clinical Diagnosis', value: []},
+      {type: 'section-text', field: 'Affected Individuals Identified', value: []},
+      {type: 'section-text', field: 'Sequencing', value: []},
+      {type: 'section-text', field: 'Testing', value: []},
+      {type: 'section-text', field: 'Systems', value: []},
+      {type: 'section-text', field: 'Clinical Updates', value: []},
+      {type: 'section-text', field: 'Recent Diagnoses', value: []},
+      {type: 'section-text', field: 'Recent Symptoms', value: []},
+      {type: 'section-text', field: 'Developmental History', value: []},
+      {type: 'section-text', field: 'Laboratory Notes', value: []},
+      {type: 'section-text', field: 'Additional Details', value: []},
+    ],
+  },
+  'Family History': {
+    header: 'Family History',
+    content: [
+      {type: 'section-text', field: 'Family Diseases', value: []},
+      {type: 'section-text', field: 'Familial HPO terms', value: []},
+    ],
+  },
+  Pedigree: {
+    header: 'Pedigree',
+    attachment_field: 'Pedigree',
+    content: [{type: 'images-dataset', field: 'Pedigree', value: []}],
+  },
+};
+
+function clonePmiDefaultSection(header) {
+  const raw = PMI_DEFAULT_SECTIONS[header];
+  if (!raw) {
+    return undefined;
+  }
+  return typeof structuredClone === 'function' ?
+    structuredClone(raw) :
+    JSON.parse(JSON.stringify(raw));
+}
+
 const sectionsList = computed(() => {
-  return analysisStore.analysis.sections;
+  if (!isPmiProject.value) {
+    return analysisStore.analysis.sections;
+  }
+
+  const pmiSectionOrder = ['Brief', 'Clinical History', 'Family History', 'Pedigree'];
+  const sections = analysisStore.analysis.sections || [];
+  const pmiSections = pmiSectionOrder
+      .map((header) => {
+        const existingSection = sections.find((section) => section.header === header);
+        const section = existingSection ?? clonePmiDefaultSection(header);
+        if (typeof section === 'undefined') {
+          return undefined;
+        }
+
+        return {
+          ...section,
+          is_fallback: !existingSection,
+        };
+      })
+      .filter((section) => typeof section !== 'undefined');
+
+  return pmiSections.map((section) => {
+    if (section.header !== 'Brief') {
+      return section;
+    }
+
+    const hiddenBriefFields = new Set(['ACMG Classification', 'ACMG Classification Criteria', 'ACMG Criteria To Add']);
+    return {
+      ...section,
+      content: section.content.filter((row) => !hiddenBriefFields.has(row.field)),
+    };
+  });
 });
 
 const attachments = computed(() => {
@@ -195,6 +317,10 @@ const discussions = computed(() => {
 
 const genomicUnitsList = computed(() => {
   return analysisStore.analysis.genomic_units;
+});
+
+const isPmiProject = computed(() => {
+  return analysisStore.analysis.project_name === 'PMI';
 });
 
 /**
@@ -659,5 +785,9 @@ app-header {
 .save-modal {
   position: sticky;
   bottom: 0;
+}
+
+.variants-of-interest {
+  margin: 0;
 }
 </style>
